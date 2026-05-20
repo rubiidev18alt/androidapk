@@ -49,6 +49,7 @@ class ShowKeyboardActivity : Activity() {
             editText.requestFocus()
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
+            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
         }, 80)
 
         editText.postDelayed({
