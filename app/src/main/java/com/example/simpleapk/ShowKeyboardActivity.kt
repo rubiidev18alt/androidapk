@@ -49,13 +49,18 @@ class ShowKeyboardActivity : Activity() {
             editText.requestFocus()
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             imm.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
-            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0)
         }, 80)
 
         editText.postDelayed({
-            finishAndRemoveTask()
+            editText.requestFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            imm.showSoftInput(editText, InputMethodManager.SHOW_FORCED)
+        }, 300)
+
+        editText.postDelayed({
+            finish()
             overridePendingTransition(0, 0)
-        }, 450)
+        }, 650)
     }
 
     override fun finish() {
