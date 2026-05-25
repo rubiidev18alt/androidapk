@@ -4,7 +4,7 @@
         This keeps the expressive color direction but avoids XML parent/styles that
         do not exist in the available MDC dependency.
     -->
-    <style name="Theme.SimpleApk" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="Theme.QuirkMusic" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/md3_expressive_primary</item>
         <item name="colorOnPrimary">@color/md3_expressive_on_primary</item>
         <item name="colorPrimaryVariant">@color/md3_expressive_primary_container</item>
