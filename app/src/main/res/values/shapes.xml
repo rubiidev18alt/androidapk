@@ -4,7 +4,7 @@
         Parent uses the stable MaterialComponents shape family instead of a Material3
         resource name that is not present in older MDC XML resources.
     -->
-    <style name="ShapeAppearance.SimpleApk.HeroCard" parent="ShapeAppearance.MaterialComponents.LargeComponent">
+    <style name="ShapeAppearance.QuirkMusic.HeroCard" parent="ShapeAppearance.MaterialComponents.LargeComponent">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSizeTopLeft">36dp</item>
         <item name="cornerSizeTopRight">12dp</item>
