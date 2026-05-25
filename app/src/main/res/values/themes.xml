@@ -1,18 +1,10 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!--
-        Stable Material Components theme.
-        This keeps the expressive color direction but avoids XML parent/styles that
-        do not exist in the available MDC dependency.
-    -->
-    <style name="Theme.SimpleApk" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/md3_expressive_primary</item>
-        <item name="colorOnPrimary">@color/md3_expressive_on_primary</item>
-        <item name="colorPrimaryVariant">@color/md3_expressive_primary_container</item>
-        <item name="colorSecondary">@color/md3_expressive_secondary_container</item>
-        <item name="colorOnSecondary">@color/md3_expressive_on_secondary_container</item>
-        <item name="android:colorBackground">@color/md3_expressive_surface</item>
-        <item name="android:textColorPrimary">@color/md3_expressive_on_surface</item>
-        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+<resources>
+    <!-- Host theme only. Real Material 3 styling now lives in Compose MaterialTheme. -->
+    <style name="Theme.SimpleApk" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:colorAccent">@color/md3_expressive_primary</item>
         <item name="android:navigationBarColor">@color/md3_expressive_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>
