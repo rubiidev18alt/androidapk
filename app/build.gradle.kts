@@ -45,4 +45,5 @@ dependencies {
     // keep the project on the known-stable Material Components release.
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation("androidx.media:media:1.7.0")
 }
