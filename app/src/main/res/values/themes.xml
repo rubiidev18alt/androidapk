@@ -1,22 +1,17 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!--
-        Material 3 Expressive baseline.
-        Uses semantic container roles instead of rigid legacy hex colors, giving the UI
-        higher contrast and better dynamic-color compatibility on Android 12+.
+        Stable Material Components theme.
+        This keeps the expressive color direction but avoids XML parent/styles that
+        do not exist in the available MDC dependency.
     -->
-    <style name="Theme.SimpleApk" parent="Theme.Material3.DynamicColors.DayNight.NoActionBar">
+    <style name="Theme.SimpleApk" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">@color/md3_expressive_primary</item>
         <item name="colorOnPrimary">@color/md3_expressive_on_primary</item>
-        <item name="colorPrimaryContainer">@color/md3_expressive_primary_container</item>
-        <item name="colorOnPrimaryContainer">@color/md3_expressive_on_primary_container</item>
-        <item name="colorSecondaryContainer">@color/md3_expressive_secondary_container</item>
-        <item name="colorOnSecondaryContainer">@color/md3_expressive_on_secondary_container</item>
-        <item name="colorTertiaryContainer">@color/md3_expressive_tertiary_container</item>
-        <item name="colorOnTertiaryContainer">@color/md3_expressive_on_tertiary_container</item>
-        <item name="colorSurface">@color/md3_expressive_surface</item>
-        <item name="colorOnSurface">@color/md3_expressive_on_surface</item>
-        <item name="colorSurfaceVariant">@color/md3_expressive_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/md3_expressive_on_surface_variant</item>
+        <item name="colorPrimaryVariant">@color/md3_expressive_primary_container</item>
+        <item name="colorSecondary">@color/md3_expressive_secondary_container</item>
+        <item name="colorOnSecondary">@color/md3_expressive_on_secondary_container</item>
+        <item name="android:colorBackground">@color/md3_expressive_surface</item>
+        <item name="android:textColorPrimary">@color/md3_expressive_on_surface</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
         <item name="android:navigationBarColor">@color/md3_expressive_surface</item>
     </style>
