@@ -1,10 +1,8 @@
 package chatgptapkexperiments.quirkmusic
 
 import android.graphics.Color
+import android.graphics.GradientDrawable
 import android.graphics.Typeface
-import android.media.MediaMetadataRetriever
-import android.media.MediaPlayer
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -15,50 +13,47 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class PlayerActivity : AppCompatActivity() {
-    private var mediaPlayer: MediaPlayer? = null
     private val handler = Handler(Looper.getMainLooper())
+    private lateinit var art: ImageView
+    private lateinit var titleView: TextView
+    private lateinit var artistView: TextView
     private lateinit var seekBar: SeekBar
     private lateinit var timeText: TextView
     private lateinit var playPause: ImageButton
 
+    private val playbackListener = { updateScreen() }
     private val progressTick = object : Runnable {
         override fun run() {
-            updateProgress()
+            updateScreen()
             handler.postDelayed(this, 500)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val uriString = intent.getStringExtra(MusicExtras.URI)
-        if (uriString == null) {
+        if (MusicPlaybackManager.currentTrack == null) {
             finish()
             return
         }
-        val title = intent.getStringExtra(MusicExtras.TITLE) ?: "Unknown track"
-        val artist = intent.getStringExtra(MusicExtras.ARTIST) ?: "Unknown artist"
-        val duration = intent.getLongExtra(MusicExtras.DURATION, 0L)
-        buildLayout(uriString, title, artist, duration)
-        preparePlayer(Uri.parse(uriString))
+        buildLayout()
+        MusicPlaybackManager.addListener(playbackListener)
         handler.post(progressTick)
     }
 
     override fun onDestroy() {
+        MusicPlaybackManager.removeListener(playbackListener)
         handler.removeCallbacks(progressTick)
-        mediaPlayer?.release()
-        mediaPlayer = null
         super.onDestroy()
     }
 
-    private fun buildLayout(uriString: String, title: String, artist: String, duration: Long) {
+    private fun buildLayout() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(Color.rgb(23, 8, 18))
+            background = verticalGradient()
             setPadding(22.dp, 22.dp, 22.dp, 28.dp)
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
@@ -69,159 +64,125 @@ class PlayerActivity : AppCompatActivity() {
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
         val back = ImageButton(this).apply {
-            setImageResource(android.R.drawable.ic_media_previous)
+            setImageResource(android.R.drawable.ic_menu_revert)
             setColorFilter(Color.WHITE)
-            setBackgroundColor(Color.TRANSPARENT)
+            background = rounded(Color.rgb(54, 17, 42), 22.dp)
             contentDescription = "Back"
             setOnClickListener { finish() }
-            layoutParams = LinearLayout.LayoutParams(48.dp, 48.dp)
         }
-        val screenTitle = TextView(this).apply {
+        val heading = TextView(this).apply {
             text = "Now playing"
-            setTextColor(Color.rgb(255, 241, 247))
+            setTextColor(Color.rgb(255, 224, 239))
             textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
-        val spacer = TextView(this).apply { layoutParams = LinearLayout.LayoutParams(48.dp, 1) }
-        top.addView(back)
-        top.addView(screenTitle)
-        top.addView(spacer)
+        top.addView(back, LinearLayout.LayoutParams(48.dp, 48.dp))
+        top.addView(heading)
+        top.addView(TextView(this), LinearLayout.LayoutParams(48.dp, 1))
 
-        val art = ImageView(this).apply {
-            setBackgroundColor(Color.rgb(122, 41, 79))
+        art = ImageView(this).apply {
+            background = rounded(Color.rgb(122, 41, 79), 34.dp)
             scaleType = ImageView.ScaleType.CENTER_CROP
-            setImageBitmap(readArtwork(uriString))
-            layoutParams = LinearLayout.LayoutParams(280.dp, 280.dp).apply {
-                topMargin = 58.dp
+            elevation = 12f
+            layoutParams = LinearLayout.LayoutParams(300.dp, 300.dp).apply {
+                topMargin = 52.dp
                 bottomMargin = 34.dp
             }
         }
 
-        val titleView = TextView(this).apply {
-            text = title
+        titleView = TextView(this).apply {
             setTextColor(Color.WHITE)
-            textSize = 26f
+            textSize = 28f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             maxLines = 2
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
-        val artistView = TextView(this).apply {
-            text = artist
-            setTextColor(Color.rgb(255, 190, 222))
+        artistView = TextView(this).apply {
+            setTextColor(Color.rgb(255, 185, 220))
             textSize = 16f
             gravity = Gravity.CENTER
             maxLines = 1
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = 8.dp
-                bottomMargin = 26.dp
+                bottomMargin = 30.dp
             }
         }
 
         seekBar = SeekBar(this).apply {
-            max = duration.toInt().coerceAtLeast(1)
-            progress = 0
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            max = 1
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    if (fromUser) mediaPlayer?.seekTo(progress)
+                    if (fromUser) MusicPlaybackManager.seekTo(progress)
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
                 override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
             })
         }
         timeText = TextView(this).apply {
-            text = "0:00 / ${TrackMetadataReader.formatTime(duration)}"
             setTextColor(Color.rgb(255, 190, 222))
             textSize = 13f
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                bottomMargin = 22.dp
+                bottomMargin = 24.dp
             }
         }
 
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
-        val rewind = playerButton(android.R.drawable.ic_media_rew) { mediaPlayer?.seekTo(((mediaPlayer?.currentPosition ?: 0) - 10_000).coerceAtLeast(0)) }
-        playPause = playerButton(android.R.drawable.ic_media_pause) { togglePlayback() }
-        val forward = playerButton(android.R.drawable.ic_media_ff) {
-            val player = mediaPlayer ?: return@playerButton
-            player.seekTo((player.currentPosition + 10_000).coerceAtMost(player.duration))
-        }
-        controls.addView(rewind)
-        controls.addView(playPause)
-        controls.addView(forward)
+        controls.addView(playerButton(android.R.drawable.ic_media_previous) { MusicPlaybackManager.previous(this) })
+        controls.addView(playerButton(android.R.drawable.ic_media_rew) { MusicPlaybackManager.seekTo((MusicPlaybackManager.position - 10_000).coerceAtLeast(0)) })
+        playPause = playerButton(android.R.drawable.ic_media_pause) { MusicPlaybackManager.toggle(this) }
+        controls.addView(playPause, LinearLayout.LayoutParams(82.dp, 82.dp).apply { setMargins(10.dp, 0, 10.dp, 0) })
+        controls.addView(playerButton(android.R.drawable.ic_media_ff) { MusicPlaybackManager.seekTo((MusicPlaybackManager.position + 10_000).coerceAtMost(MusicPlaybackManager.duration)) })
+        controls.addView(playerButton(android.R.drawable.ic_media_next) { MusicPlaybackManager.next(this) })
 
         root.addView(top)
         root.addView(art)
-        root.addView(titleView)
+        root.addView(titleView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(artistView)
-        root.addView(seekBar)
+        root.addView(seekBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(timeText)
-        root.addView(controls)
+        root.addView(controls, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         setContentView(root)
     }
 
-    private fun preparePlayer(uri: Uri) {
-        mediaPlayer = MediaPlayer().apply {
-            setDataSource(this@PlayerActivity, uri)
-            setOnPreparedListener {
-                seekBar.max = it.duration.coerceAtLeast(1)
-                it.start()
-                playPause.setImageResource(android.R.drawable.ic_media_pause)
-            }
-            setOnCompletionListener {
-                playPause.setImageResource(android.R.drawable.ic_media_play)
-            }
-            setOnErrorListener { _, _, _ ->
-                Toast.makeText(this@PlayerActivity, "Could not play this track.", Toast.LENGTH_SHORT).show()
-                true
-            }
-            prepareAsync()
-        }
-    }
-
-    private fun togglePlayback() {
-        val player = mediaPlayer ?: return
-        if (player.isPlaying) player.pause() else player.start()
-        playPause.setImageResource(if (player.isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
-    }
-
-    private fun updateProgress() {
-        val player = mediaPlayer ?: return
-        val current = player.currentPosition
-        val duration = player.duration.coerceAtLeast(1)
+    private fun updateScreen() {
+        val track = MusicPlaybackManager.currentTrack ?: return
+        titleView.text = track.title
+        artistView.text = track.artist
+        art.setImageBitmap(TrackMetadataReader.bitmapFrom(track))
+        val duration = MusicPlaybackManager.duration.coerceAtLeast(1)
+        val current = MusicPlaybackManager.position.coerceIn(0, duration)
         seekBar.max = duration
-        seekBar.progress = current.coerceIn(0, duration)
+        seekBar.progress = current
         val left = (duration - current).coerceAtLeast(0)
         timeText.text = "${TrackMetadataReader.formatTime(current.toLong())} / -${TrackMetadataReader.formatTime(left.toLong())}"
-        playPause.setImageResource(if (player.isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
+        playPause.setImageResource(if (MusicPlaybackManager.isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
     }
-
-    private fun readArtwork(uriString: String) = runCatching {
-        val retriever = MediaMetadataRetriever()
-        try {
-            retriever.setDataSource(this, Uri.parse(uriString))
-            retriever.embeddedPicture?.let { bytes -> android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
-        } finally {
-            retriever.release()
-        }
-    }.getOrNull()
 
     private fun playerButton(icon: Int, action: () -> Unit): ImageButton {
         return ImageButton(this).apply {
             setImageResource(icon)
             setColorFilter(Color.WHITE)
-            setBackgroundColor(Color.TRANSPARENT)
+            background = rounded(Color.rgb(70, 22, 53), 26.dp)
             setOnClickListener { action() }
-            layoutParams = LinearLayout.LayoutParams(74.dp, 74.dp)
+            layoutParams = LinearLayout.LayoutParams(58.dp, 58.dp).apply { setMargins(4.dp, 0, 4.dp, 0) }
         }
     }
+
+    private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = radius.toFloat()
+    }
+
+    private fun verticalGradient() = GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        intArrayOf(Color.rgb(42, 9, 33), Color.rgb(23, 8, 18), Color.rgb(10, 2, 8))
+    )
 
     private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
 }
