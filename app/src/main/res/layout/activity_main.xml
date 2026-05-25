@@ -4,16 +4,91 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:padding="24dp"
     tools:context=".MainActivity">
 
-    <TextView
-        android:id="@+id/helloText"
-        android:layout_width="wrap_content"
+    <!--
+        Expressive containment: a high-contrast primary container anchors the screen,
+        while intentionally uneven corners create more visual tension than a basic card.
+    -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/heroCard"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:text="Hello from a simple APK template"
+        app:cardBackgroundColor="?attr/colorPrimaryContainer"
+        app:cardElevation="0dp"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.SimpleApk.HeroCard"
+        app:strokeColor="?attr/colorOnPrimaryContainer"
+        app:strokeWidth="2dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent">
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="28dp"
+            android:paddingTop="32dp"
+            android:paddingEnd="28dp"
+            android:paddingBottom="28dp">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/eyebrowText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:backgroundTint="?attr/colorTertiaryContainer"
+                android:paddingStart="12dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="6dp"
+                android:text="MATERIAL 3 EXPRESSIVE"
+                android:textAllCaps="true"
+                android:textColor="?attr/colorOnTertiaryContainer"
+                android:textStyle="bold"
+                app:backgroundTint="?attr/colorTertiaryContainer"
+                app:cornerRadius="18dp" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/heroTitle"
+                style="?attr/textAppearanceDisplaySmall"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:text="Simple APK, now with actual energy."
+                android:textColor="?attr/colorOnPrimaryContainer"
+                android:textStyle="bold" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/bodyText"
+                style="?attr/textAppearanceBodyLarge"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Semantic colors, stronger contrast, editorial scale, and asymmetric containment replace the old plain centered TextView."
+                android:textColor="?attr/colorOnPrimaryContainer" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/primaryAction"
+                style="@style/Widget.Material3.Button.FilledTonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="26dp"
+                android:minHeight="56dp"
+                android:paddingStart="26dp"
+                android:paddingEnd="26dp"
+                android:text="Explore now"
+                android:textAllCaps="true"
+                android:textStyle="bold"
+                app:backgroundTint="?attr/colorSecondaryContainer"
+                app:cornerRadius="28dp"
+                app:icon="@android:drawable/ic_menu_compass"
+                app:iconGravity="textStart"
+                app:iconPadding="10dp"
+                app:iconTint="?attr/colorOnSecondaryContainer"
+                app:rippleColor="?attr/colorTertiaryContainer" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 </androidx.constraintlayout.widget.ConstraintLayout>
