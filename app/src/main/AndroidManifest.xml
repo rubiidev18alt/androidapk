@@ -1,9 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
         android:allowBackup="true"
-        android:label="Simple APK"
+        android:label="QuirkMusic"
         android:supportsRtl="true"
-        android:theme="@style/Theme.SimpleApk">
+        android:theme="@style/Theme.QuirkMusic">
         <activity
             android:name=".MainActivity"
             android:exported="true">
