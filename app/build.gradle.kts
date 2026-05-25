@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.simpleapk"
+    namespace = "chatgptapkexperiments.quirkmusic"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.simpleapk"
+        applicationId = "chatgptapkexperiments.quirkmusic"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
