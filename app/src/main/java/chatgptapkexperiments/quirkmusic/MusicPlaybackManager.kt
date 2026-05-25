@@ -1,23 +1,26 @@
 package chatgptapkexperiments.quirkmusic
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.media.app.NotificationCompat.MediaStyle
 
 object MusicPlaybackManager {
     private const val CHANNEL_ID = "quirkmusic_playback"
     private const val NOTIFICATION_ID = 42
 
     private var mediaPlayer: MediaPlayer? = null
-    private var appContext: Context? = null
     private val listeners = mutableSetOf<() -> Unit>()
 
     var playlist: List<MusicTrack> = emptyList()
@@ -40,7 +43,6 @@ object MusicPlaybackManager {
         get() = runCatching { mediaPlayer?.currentPosition ?: 0 }.getOrDefault(0)
 
     fun initialize(context: Context) {
-        appContext = context.applicationContext
         createNotificationChannel(context.applicationContext)
     }
 
@@ -51,20 +53,21 @@ object MusicPlaybackManager {
     }
 
     fun play(context: Context, index: Int) {
-        initialize(context)
+        val appContext = context.applicationContext
+        initialize(appContext)
         if (index !in playlist.indices) return
         currentIndex = index
         isPrepared = false
         mediaPlayer?.release()
         mediaPlayer = MediaPlayer().apply {
-            setDataSource(context.applicationContext, Uri.parse(playlist[index].uriString))
+            setDataSource(appContext, Uri.parse(playlist[index].uriString))
             setOnPreparedListener {
                 isPrepared = true
                 it.start()
-                showNotification(context.applicationContext)
+                showNotification(appContext)
                 notifyChanged()
             }
-            setOnCompletionListener { next(context.applicationContext) }
+            setOnCompletionListener { next(appContext) }
             setOnErrorListener { _, _, _ ->
                 isPrepared = false
                 notifyChanged()
@@ -72,38 +75,35 @@ object MusicPlaybackManager {
             }
             prepareAsync()
         }
-        showNotification(context.applicationContext)
+        showNotification(appContext)
         notifyChanged()
     }
 
     fun toggle(context: Context) {
-        initialize(context)
+        val appContext = context.applicationContext
+        initialize(appContext)
         val player = mediaPlayer
         when {
-            player == null && playlist.isNotEmpty() -> play(context, 0)
+            player == null && playlist.isNotEmpty() -> play(appContext, 0)
             player?.isPlaying == true -> player.pause()
             player != null && isPrepared -> player.start()
         }
-        showNotification(context.applicationContext)
-        notifyChanged()
-    }
-
-    fun pause(context: Context) {
-        mediaPlayer?.pause()
-        showNotification(context.applicationContext)
+        showNotification(appContext)
         notifyChanged()
     }
 
     fun next(context: Context) {
+        val appContext = context.applicationContext
         if (playlist.isEmpty()) return
         val nextIndex = if (currentIndex < 0) 0 else (currentIndex + 1) % playlist.size
-        play(context, nextIndex)
+        play(appContext, nextIndex)
     }
 
     fun previous(context: Context) {
+        val appContext = context.applicationContext
         if (playlist.isEmpty()) return
         val nextIndex = if (currentIndex < 0) 0 else (currentIndex - 1 + playlist.size) % playlist.size
-        play(context, nextIndex)
+        play(appContext, nextIndex)
     }
 
     fun seekTo(positionMs: Int) {
@@ -141,16 +141,16 @@ object MusicPlaybackManager {
 
     private fun showNotification(context: Context) {
         val track = currentTrack ?: return
-        val openIntent = Intent(context, MainActivity::class.java)
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return
+        }
+
         val contentIntent = PendingIntent.getActivity(
             context,
             0,
-            openIntent,
+            Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val previousIntent = playbackAction(context, MusicNotificationReceiver.ACTION_PREVIOUS, 1)
-        val playPauseIntent = playbackAction(context, MusicNotificationReceiver.ACTION_TOGGLE, 2)
-        val nextIntent = playbackAction(context, MusicNotificationReceiver.ACTION_NEXT, 3)
         val artwork = track.artworkBytes?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -165,22 +165,17 @@ object MusicPlaybackManager {
             .setShowWhen(false)
             .setColor(0xFFD81B7D.toInt())
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .addAction(android.R.drawable.ic_media_previous, "Previous", previousIntent)
+            .addAction(android.R.drawable.ic_media_previous, "Previous", playbackAction(context, MusicNotificationReceiver.ACTION_PREVIOUS, 1))
             .addAction(
                 if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
                 if (isPlaying) "Pause" else "Play",
-                playPauseIntent
+                playbackAction(context, MusicNotificationReceiver.ACTION_TOGGLE, 2)
             )
-            .addAction(android.R.drawable.ic_media_next, "Next", nextIntent)
-            .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(0, 1, 2)
-            )
+            .addAction(android.R.drawable.ic_media_next, "Next", playbackAction(context, MusicNotificationReceiver.ACTION_NEXT, 3))
+            .setStyle(MediaStyle().setShowActionsInCompactView(0, 1, 2))
             .build()
 
-        runCatching {
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
-        }
+        NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
     }
 
     private fun playbackAction(context: Context, action: String, requestCode: Int): PendingIntent {
