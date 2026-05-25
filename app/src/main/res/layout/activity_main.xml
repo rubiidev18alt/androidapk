@@ -4,7 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="?attr/colorSurface"
+    android:background="@color/md3_expressive_surface"
     android:padding="24dp"
     tools:context=".MainActivity">
 
@@ -16,14 +16,14 @@
         android:id="@+id/heroCard"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        app:cardBackgroundColor="?attr/colorPrimaryContainer"
+        app:cardBackgroundColor="@color/md3_expressive_primary_container"
         app:cardElevation="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         app:shapeAppearanceOverlay="@style/ShapeAppearance.SimpleApk.HeroCard"
-        app:strokeColor="?attr/colorOnPrimaryContainer"
+        app:strokeColor="@color/md3_expressive_on_primary_container"
         app:strokeWidth="2dp">
 
         <LinearLayout
@@ -44,33 +44,33 @@
                 android:paddingTop="6dp"
                 android:paddingEnd="12dp"
                 android:paddingBottom="6dp"
-                android:text="MATERIAL 3 EXPRESSIVE"
+                android:text="MATERIAL EXPRESSIVE"
                 android:textAllCaps="true"
-                android:textColor="?attr/colorOnTertiaryContainer"
+                android:textColor="@color/md3_expressive_on_tertiary_container"
                 android:textStyle="bold" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/heroTitle"
-                style="?attr/textAppearanceDisplaySmall"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="22dp"
                 android:text="Simple APK, now with actual energy."
-                android:textColor="?attr/colorOnPrimaryContainer"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline4"
+                android:textColor="@color/md3_expressive_on_primary_container"
                 android:textStyle="bold" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/bodyText"
-                style="?attr/textAppearanceBodyLarge"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="Semantic colors, stronger contrast, editorial scale, and asymmetric containment replace the old plain centered TextView."
-                android:textColor="?attr/colorOnPrimaryContainer" />
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+                android:textColor="@color/md3_expressive_on_primary_container" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/primaryAction"
-                style="@style/Widget.Material3.Button.FilledTonalButton"
+                style="@style/Widget.MaterialComponents.Button"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="26dp"
@@ -79,14 +79,15 @@
                 android:paddingEnd="26dp"
                 android:text="Explore now"
                 android:textAllCaps="true"
+                android:textColor="@color/md3_expressive_on_secondary_container"
                 android:textStyle="bold"
-                app:backgroundTint="?attr/colorSecondaryContainer"
+                app:backgroundTint="@color/md3_expressive_secondary_container"
                 app:cornerRadius="28dp"
                 app:icon="@android:drawable/ic_menu_compass"
                 app:iconGravity="textStart"
                 app:iconPadding="10dp"
-                app:iconTint="?attr/colorOnSecondaryContainer"
-                app:rippleColor="?attr/colorTertiaryContainer" />
+                app:iconTint="@color/md3_expressive_on_secondary_container"
+                app:rippleColor="@color/md3_expressive_tertiary_container" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 </androidx.constraintlayout.widget.ConstraintLayout>
