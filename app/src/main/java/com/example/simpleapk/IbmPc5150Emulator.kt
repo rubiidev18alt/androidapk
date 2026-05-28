@@ -71,22 +71,17 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
         if ((port and 0xFFFF) == 0xE9) video.putChar((value and 0xFF).toChar())
     }
     fun loadRom(rom: ByteArray) {
-        val start = 0x100000 - min(rom.size, 0x10000)
-        for (i in 0 until min(rom.size, 0x10000)) ram[start + i] = rom[rom.size - min(rom.size, 0x10000) + i]
+        val romLen = min(rom.size, 0x10000)
+        val start = 0x100000 - romLen
+        for (i in 0 until romLen) ram[start + i] = rom[rom.size - romLen + i]
     }
     fun loadDemoBoot() {
-        val code = intArrayOf(
-            0xB8,0x00,0xB8, 0x8E,0xD8, 0xBE,0x28,0x01, 0x31,0xFF, 0xB9,0xD0,0x00,
-            0xFC, 0xAC, 0x08,0xC0, 0x74,0x08, 0xAA, 0xB0,0x0A, 0xAA, 0xE2,0xF5,
-            0xF4
-        )
-        val msg = "GLaBIOS ROM not bundled. Add glabios.bin to assets/roms/.\r\n" +
-            "IBM PC 5150 profile: 8088 4.77 MHz, 16 KB base RAM, CGA text.\r\n" +
-            "Type here: "
-        val base = 0xF0100
-        code.forEachIndexed { i, b -> ram[base + i] = b.toByte() }
-        msg.encodeToByteArray().forEachIndexed { i, b -> ram[0xF0128 + i] = b }
-        ram[0xF0128 + msg.length] = 0
+        ram[0xF0100] = 0xF4.toByte()
+        video.putString("GLaBIOS ROM not bundled. Add glabios.bin to app/src/main/assets/roms/.\r\n")
+        video.putString("IBM PC Model 5150 profile: Intel 8088 @ 4.77 MHz, 16 KB RAM, CGA text.\r\n")
+        video.putString("This APK contains a tiny Kotlin 8088/CGA/keyboard emulator scaffold.\r\n")
+        video.putString("It can load a GLaBIOS ROM asset, but the CPU core is intentionally small.\r\n\r\n")
+        video.putString("Type here: ")
     }
     fun interrupt(cpu: Cpu8088, intNo: Int) {
         when (intNo) {
@@ -94,7 +89,7 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
                 0x0E -> video.putChar((cpu.ax and 0xFF).toChar())
                 0x00 -> video.clear()
             }
-            0x16 -> if ((cpu.ax ushr 8) and 0xFF == 0) cpu.ax = keyboard.popAscii().code
+            0x16 -> if (((cpu.ax ushr 8) and 0xFF) == 0) cpu.ax = keyboard.popAscii().code
             0x19 -> { cpu.cs = 0xF000; cpu.ip = 0x0100 }
             0x20 -> cpu.halted = true
             else -> video.status("Unhandled INT ${intNo.toString(16)}")
@@ -118,11 +113,13 @@ class Cpu8088(private val bus: PcBus) {
     private fun rw(seg: Int, off: Int) = bus.rw(phys(seg, off)); private fun ww(seg: Int, off: Int, v: Int) = bus.ww(phys(seg, off), v)
     private fun push(v: Int) { sp = (sp - 2) and 0xFFFF; ww(ss, sp, v) }
     private fun pop(): Int = rw(ss, sp).also { sp = (sp + 2) and 0xFFFF }
+    private fun rel8() = fetch8().toByte().toInt()
+    private fun rel16() = fetch16().toShort().toInt()
 
     fun step() {
         var op = fetch8()
         segOverride = null
-        while (op in intArrayOf(0x26, 0x2E, 0x36, 0x3E)) {
+        while (op == 0x26 || op == 0x2E || op == 0x36 || op == 0x3E) {
             segOverride = when (op) { 0x26 -> es; 0x2E -> cs; 0x36 -> ss; else -> ds }
             op = fetch8()
         }
@@ -156,18 +153,18 @@ class Cpu8088(private val bus: PcBus) {
             0x2D -> ax = sub16(ax, fetch16())
             0x3C -> sub8(getReg8(0), fetch8())
             0x3D -> sub16(ax, fetch16())
-            0x74 -> if (zf()) ip = (ip + fetch8().toByte()) and 0xFFFF else fetch8()
-            0x75 -> if (!zf()) ip = (ip + fetch8().toByte()) and 0xFFFF else fetch8()
-            0xEB -> ip = (ip + fetch8().toByte()) and 0xFFFF
-            0xE9 -> ip = (ip + fetch16().toShort()) and 0xFFFF
-            0xE8 -> { val d = fetch16().toShort(); push(ip); ip = (ip + d) and 0xFFFF }
+            0x74 -> { val d = rel8(); if (zf()) ip = (ip + d) and 0xFFFF }
+            0x75 -> { val d = rel8(); if (!zf()) ip = (ip + d) and 0xFFFF }
+            0xEB -> ip = (ip + rel8()) and 0xFFFF
+            0xE9 -> ip = (ip + rel16()) and 0xFFFF
+            0xE8 -> { val d = rel16(); push(ip); ip = (ip + d) and 0xFFFF }
             0xC3 -> ip = pop()
             0xCD -> bus.interrupt(this, fetch8())
             0xE4 -> setReg8(0, bus.portIn(fetch8()))
             0xE5 -> ax = bus.portIn(fetch8())
             0xE6 -> bus.portOut(fetch8(), ax)
             0xE7 -> bus.portOut(fetch8(), ax)
-            0xE2 -> { val d = fetch8().toByte(); cx = (cx - 1) and 0xFFFF; if (cx != 0) ip = (ip + d) and 0xFFFF }
+            0xE2 -> { val d = rel8(); cx = (cx - 1) and 0xFFFF; if (cx != 0) ip = (ip + d) and 0xFFFF }
             else -> { bus.interrupt(this, 0x20); halted = true }
         }
     }
@@ -188,11 +185,11 @@ class Cpu8088(private val bus: PcBus) {
         fun write16(v: Int) { if (seg == null) setReg16(rm, v) else ww(seg, off, v) }
     }
     private fun getReg16(i: Int) = intArrayOf(ax, cx, dx, bx, sp, bp, si, di)[i and 7]
-    private fun setReg16(i: Int, v: Int) { when (i and 7) { 0 -> ax=v; 1 -> cx=v; 2 -> dx=v; 3 -> bx=v; 4 -> sp=v; 5 -> bp=v; 6 -> si=v; 7 -> di=v } }
+    private fun setReg16(i: Int, v: Int) { when (i and 7) { 0 -> ax=v and 0xFFFF; 1 -> cx=v and 0xFFFF; 2 -> dx=v and 0xFFFF; 3 -> bx=v and 0xFFFF; 4 -> sp=v and 0xFFFF; 5 -> bp=v and 0xFFFF; 6 -> si=v and 0xFFFF; 7 -> di=v and 0xFFFF } }
     private fun getReg8(i: Int) = when (i and 7) { 0 -> ax; 1 -> cx; 2 -> dx; 3 -> bx; 4 -> ax ushr 8; 5 -> cx ushr 8; 6 -> dx ushr 8; else -> bx ushr 8 } and 0xFF
     private fun setReg8(i: Int, v: Int) { val x = v and 0xFF; when (i and 7) { 0 -> ax=(ax and 0xFF00) or x; 1 -> cx=(cx and 0xFF00) or x; 2 -> dx=(dx and 0xFF00) or x; 3 -> bx=(bx and 0xFF00) or x; 4 -> ax=(ax and 0x00FF) or (x shl 8); 5 -> cx=(cx and 0x00FF) or (x shl 8); 6 -> dx=(dx and 0x00FF) or (x shl 8); 7 -> bx=(bx and 0x00FF) or (x shl 8) } }
     private fun getSeg(i: Int) = intArrayOf(es, cs, ss, ds)[i and 3]
-    private fun setSeg(i: Int, v: Int) { when (i and 3) { 0 -> es=v; 1 -> cs=v; 2 -> ss=v; 3 -> ds=v } }
+    private fun setSeg(i: Int, v: Int) { when (i and 3) { 0 -> es=v and 0xFFFF; 1 -> cs=v and 0xFFFF; 2 -> ss=v and 0xFFFF; 3 -> ds=v and 0xFFFF } }
     private fun setSz(v: Int, bits: Int) { val mask = if (bits == 8) 0xFF else 0xFFFF; flags = if ((v and mask) == 0) flags or 0x40 else flags and 0x40.inv(); flags = if ((v and (1 shl (bits - 1))) != 0) flags or 0x80 else flags and 0x80.inv() }
     private fun zf() = flags and 0x40 != 0
     private fun add8(a:Int,b:Int)=((a+b).also{setSz(it,8)}) and 0xFF; private fun add16(a:Int,b:Int)=((a+b).also{setSz(it,16)}) and 0xFFFF
@@ -205,6 +202,7 @@ class CgaTextScreen {
     private var cursor = 0
     fun clear() { chars.fill(' '); cursor = 0 }
     fun syncByte(offset: Int, value: Int) { val cell = offset / 2; if (cell in chars.indices) chars[cell] = printable(value) }
+    fun putString(text: String) = text.forEach { putChar(it) }
     fun putChar(ch: Char) {
         when (ch) {
             '\r' -> cursor -= cursor % 80
@@ -222,7 +220,10 @@ class CgaTextScreen {
 class PcKeyboard {
     private val ascii = ArrayDeque<Char>()
     fun push(c: Char) { ascii.add(c) }
-    fun popAscii(): Char = while (ascii.isEmpty()) Thread.sleep(1).let { } .let { ascii.removeFirst() }
+    fun popAscii(): Char {
+        while (ascii.isEmpty()) Thread.sleep(1)
+        return ascii.removeFirst()
+    }
     fun popAsciiOrNull(): Char? = if (ascii.isEmpty()) null else ascii.removeFirst()
     fun popScanCode(): Int = popAsciiOrNull()?.code ?: 0
 }
