@@ -10,24 +10,27 @@ private const val CGA_TEXT_BASE = 0xB8000
 private const val CGA_TEXT_SIZE = 0x4000
 private const val BIOS_ROM_BASE = 0xF0000
 private const val BIOS_ROM_SIZE = 0x10000
+private const val CPU_HZ = 4_772_727.0
+private const val FRAME_NS = 16_666_667L
+private const val DEFAULT_FLOPPY_SIZE = 160 * 1024
 
 class IbmPc5150Emulator {
     val video = CgaTextScreen()
     val keyboard = PcKeyboard()
     private val bus = PcBus(video, keyboard)
     private val cpu = Cpu8088(bus)
+    private var cyclesCarry = 0.0
     var biosName: String = "built-in monitor"
         private set
 
     fun bootFromAssets(assets: AssetManager) {
-        val rom = try {
-            assets.open("roms/glabios.bin").use { it.readBytes() }
-        } catch (_: FileNotFoundException) {
-            null
-        }
+        val rom = try { assets.open("roms/glabios.bin").use { it.readBytes() } } catch (_: FileNotFoundException) { null }
+        val floppy = try { assets.open("floppy/disk0.img").use { it.readBytes() } } catch (_: FileNotFoundException) { null }
 
         bus.reset()
         cpu.reset()
+        bus.loadFloppy(floppy)
+        cyclesCarry = 0.0
         if (rom != null && rom.isNotEmpty()) {
             bus.loadRom(rom)
             biosName = "GLaBIOS asset"
@@ -42,9 +45,10 @@ class IbmPc5150Emulator {
     }
 
     fun runFrame() {
-        repeat(18_000) {
-            if (!cpu.halted) cpu.step() else return@repeat
-        }
+        cyclesCarry += CPU_HZ * (FRAME_NS / 1_000_000_000.0)
+        var budget = cyclesCarry.toInt()
+        cyclesCarry -= budget
+        while (budget > 0 && !cpu.halted) budget -= cpu.step()
         if (cpu.halted) bus.runMonitorTick()
     }
 }
@@ -53,6 +57,7 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
     private val baseRam = ByteArray(BASE_RAM_SIZE)
     private val cgaRam = ByteArray(CGA_TEXT_SIZE) { if (it % 2 == 0) 0x20 else 0x07 }
     private val biosRom = ByteArray(BIOS_ROM_SIZE) { 0xFF.toByte() }
+    private var floppy: ByteArray? = null
     private var pit = 0
     private var fallbackConsoleEnabled = false
     private val fallbackLine = StringBuilder()
@@ -62,11 +67,14 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
         cgaRam.fill(0x07)
         for (i in cgaRam.indices step 2) cgaRam[i] = 0x20
         biosRom.fill(0xFF.toByte())
+        floppy = null
         video.clear()
         pit = 0
         fallbackConsoleEnabled = false
         fallbackLine.clear()
     }
+
+    fun loadFloppy(bytes: ByteArray?) { floppy = bytes?.takeIf { it.isNotEmpty() } }
 
     fun rb(addr: Int): Int {
         val a = addr and 0xFFFFF
@@ -99,9 +107,7 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
         0x40 -> pit++ and 0xFF
         else -> 0xFF
     }
-    fun portOut(port: Int, value: Int) {
-        if ((port and 0xFFFF) == 0xE9) video.putChar((value and 0xFF).toChar())
-    }
+    fun portOut(port: Int, value: Int) { if ((port and 0xFFFF) == 0xE9) video.putChar((value and 0xFF).toChar()) }
     fun loadRom(rom: ByteArray) {
         biosRom.fill(0xFF.toByte())
         val romLen = min(rom.size, BIOS_ROM_SIZE)
@@ -122,9 +128,10 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
         video.putString("16 KB OK\r\n\r\n")
         video.putString("Keyboard........ OK\r\n")
         video.putString("Timer........... OK\r\n")
-        video.putString("CGA text........ OK\r\n\r\n")
+        video.putString("CGA text........ OK\r\n")
+        video.putString("Diskette A...... ${if (floppy == null) "not ready" else "${floppy!!.size / 1024} KB image"}\r\n\r\n")
         video.putString("GLaBIOS ROM image not present at app/src/main/assets/roms/glabios.bin\r\n")
-        video.putString("No bootable disk image is attached.\r\n")
+        if (floppy == null) video.putString("No bootable disk image is attached.\r\n") else video.putString("Disk image loaded; fallback BIOS supports simple INT 13h sector reads.\r\n")
         video.putString("Entering ROM monitor fallback. Type HELP for available checks.\r\n\r\n")
         video.putString("> ")
     }
@@ -137,45 +144,62 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
             }
             0x11 -> cpu.ax = 0x0021
             0x12 -> cpu.ax = 16
+            0x13 -> diskInt(cpu)
             0x16 -> if (((cpu.ax ushr 8) and 0xFF) == 0) cpu.ax = keyboard.popAscii().code
-            0x19 -> { loadFallbackBios(); cpu.cs = 0xF000; cpu.ip = 0x0100; cpu.halted = false }
+            0x19 -> { loadBootSector(cpu); cpu.halted = false }
             0x20 -> cpu.halted = true
             else -> video.status("BIOS fallback: unhandled INT ${intNo.toString(16).uppercase()}")
         }
     }
+    private fun diskInt(cpu: Cpu8088) {
+        when ((cpu.ax ushr 8) and 0xFF) {
+            0x00 -> clearCarry(cpu)
+            0x02 -> readSectors(cpu)
+            else -> setDiskError(cpu, 0x01)
+        }
+    }
+    private fun readSectors(cpu: Cpu8088) {
+        val count = cpu.ax and 0xFF
+        val cylinder = ((cpu.cx ushr 8) and 0xFF) or ((cpu.cx and 0xC0) shl 2)
+        val sector = cpu.cx and 0x3F
+        val head = (cpu.dx ushr 8) and 0xFF
+        val image = floppy ?: return setDiskError(cpu, 0x80)
+        if (count <= 0 || sector !in 1..8 || head !in 0..1) return setDiskError(cpu, 0x04)
+        val lba = ((cylinder * 2 + head) * 8) + (sector - 1)
+        val bytes = count * 512
+        val src = lba * 512
+        if (src < 0 || src + bytes > image.size) return setDiskError(cpu, 0x04)
+        val dest = ((cpu.es and 0xFFFF) shl 4) + (cpu.bx and 0xFFFF)
+        for (i in 0 until bytes) wb(dest + i, image[src + i].toInt() and 0xFF)
+        cpu.ax = count
+        clearCarry(cpu)
+    }
+    private fun loadBootSector(cpu: Cpu8088) {
+        val image = floppy
+        if (image == null || image.size < 512) { drawFallbackPost(); cpu.cs = 0xF000; cpu.ip = 0x0100; return }
+        for (i in 0 until 512) wb(0x7C00 + i, image[i].toInt() and 0xFF)
+        cpu.cs = 0x0000
+        cpu.ip = 0x7C00
+    }
+    private fun setDiskError(cpu: Cpu8088, status: Int) { cpu.ax = (status and 0xFF) shl 8; cpu.flags = cpu.flags or 0x0001 }
+    private fun clearCarry(cpu: Cpu8088) { cpu.flags = cpu.flags and 0x0001.inv() }
     fun runMonitorTick() {
         val ch = keyboard.popAsciiOrNull() ?: return
-        if (!fallbackConsoleEnabled) {
-            video.putChar(ch)
-            return
-        }
+        if (!fallbackConsoleEnabled) { video.putChar(ch); return }
         when (ch) {
-            '\r', '\n' -> {
-                video.putString("\r\n")
-                handleFallbackCommand(fallbackLine.toString().trim().uppercase())
-                fallbackLine.clear()
-                video.putString("> ")
-            }
-            '\b' -> {
-                if (fallbackLine.isNotEmpty()) {
-                    fallbackLine.deleteAt(fallbackLine.length - 1)
-                    video.putChar('\b')
-                }
-            }
-            else -> {
-                if (ch.code in 32..126 && fallbackLine.length < 64) {
-                    fallbackLine.append(ch)
-                    video.putChar(ch)
-                }
-            }
+            '\r', '\n' -> { video.putString("\r\n"); handleFallbackCommand(fallbackLine.toString().trim().uppercase()); fallbackLine.clear(); video.putString("> ") }
+            '\b' -> if (fallbackLine.isNotEmpty()) { fallbackLine.deleteAt(fallbackLine.length - 1); video.putChar('\b') }
+            else -> if (ch.code in 32..126 && fallbackLine.length < 64) { fallbackLine.append(ch); video.putChar(ch) }
         }
     }
     private fun handleFallbackCommand(command: String) {
         when (command) {
-            "", "HELP" -> video.putString("Available checks: MEM PORTS INT CLS REBOOT\r\n")
+            "", "HELP" -> video.putString("Available checks: MEM PORTS INT DISK BOOT CLS REBOOT\r\n")
             "MEM" -> video.putString("Base memory reported by INT 12h: 16 KB; writable RAM: 00000-03FFF\r\n")
             "PORTS" -> video.putString("Stubbed hardware ports: 0040 PIT, 0060 keyboard data, 0061 PPI, 00E9 debug\r\n")
-            "INT" -> video.putString("BIOS calls present: INT 10h, 11h, 12h, 16h, 19h, 20h\r\n")
+            "INT" -> video.putString("BIOS calls present: INT 10h, 11h, 12h, 13h read, 16h, 19h, 20h\r\n")
+            "DISK" -> video.putString(if (floppy == null) "Diskette A: not ready\r\n" else "Diskette A: ${floppy!!.size} bytes, 512-byte sectors\r\n")
+            "BOOT" -> video.putString("Use GLaBIOS for real boot flow. Fallback can load sector 0 to 0000:7C00 through INT 19h.\r\n")
             "CLS" -> video.clear()
             "REBOOT" -> drawFallbackPost()
             else -> video.putString("Syntax error\r\n")
@@ -199,7 +223,7 @@ class Cpu8088(private val bus: PcBus) {
     private fun rel8() = fetch8().toByte().toInt()
     private fun rel16() = fetch16().toShort().toInt()
 
-    fun step() {
+    fun step(): Int {
         var op = fetch8()
         segOverride = null
         while (op == 0x26 || op == 0x2E || op == 0x36 || op == 0x3E) {
@@ -250,6 +274,7 @@ class Cpu8088(private val bus: PcBus) {
             0xE2 -> { val d = rel8(); cx = (cx - 1) and 0xFFFF; if (cx != 0) ip = (ip + d) and 0xFFFF }
             else -> { bus.interrupt(this, 0x20); halted = true }
         }
+        return 4
     }
 
     private fun modrm(): EA {
