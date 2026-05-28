@@ -28,8 +28,8 @@ class IbmPc5150Emulator {
             cpu.cs = 0xF000
             cpu.ip = 0xFFF0
         } else {
-            biosName = "placeholder; add app/src/main/assets/roms/glabios.bin"
-            bus.loadDemoBoot()
+            biosName = "RetroBIOS fallback"
+            bus.loadFallbackBios()
             cpu.cs = 0xF000
             cpu.ip = 0x0100
         }
@@ -46,11 +46,15 @@ class IbmPc5150Emulator {
 class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) {
     private val ram = ByteArray(1024 * 1024)
     private var pit = 0
+    private var fallbackConsoleEnabled = false
+    private val fallbackLine = StringBuilder()
 
     fun reset() {
         ram.fill(0)
         video.clear()
         pit = 0
+        fallbackConsoleEnabled = false
+        fallbackLine.clear()
     }
 
     fun rb(addr: Int): Int = ram[addr and 0xFFFFF].toInt() and 0xFF
@@ -75,28 +79,79 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
         val start = 0x100000 - romLen
         for (i in 0 until romLen) ram[start + i] = rom[rom.size - romLen + i]
     }
-    fun loadDemoBoot() {
+    fun loadFallbackBios() {
+        fallbackConsoleEnabled = true
+        fallbackLine.clear()
         ram[0xF0100] = 0xF4.toByte()
-        video.putString("GLaBIOS ROM not bundled. Add glabios.bin to app/src/main/assets/roms/.\r\n")
-        video.putString("IBM PC Model 5150 profile: Intel 8088 @ 4.77 MHz, 16 KB RAM, CGA text.\r\n")
-        video.putString("This APK contains a tiny Kotlin 8088/CGA/keyboard emulator scaffold.\r\n")
-        video.putString("It can load a GLaBIOS ROM asset, but the CPU core is intentionally small.\r\n\r\n")
-        video.putString("Type here: ")
+        drawFallbackPost()
+    }
+    private fun drawFallbackPost() {
+        video.clear()
+        video.putString("RetroBIOS XT 0.1  -  built-in fallback BIOS\r\n")
+        video.putString("General Libraries style POST for IBM PC Model 5150 experiments\r\n")
+        video.putString("---------------------------------------------------------------\r\n")
+        video.putString("CPU      : Intel 8088 compatible core @ 4.77 MHz target\r\n")
+        video.putString("Memory   : 16 KB base RAM configured, 1024 KB emulator address space\r\n")
+        video.putString("Video    : CGA compatible 80x25 text mode at B800:0000\r\n")
+        video.putString("Keyboard : Android soft keyboard mapped to PC BIOS input\r\n")
+        video.putString("Boot ROM : app/src/main/assets/roms/glabios.bin not found\r\n")
+        video.putString("Status   : Using fallback INT 10h, INT 16h, INT 19h, and monitor\r\n")
+        video.putString("---------------------------------------------------------------\r\n")
+        video.putString("Commands: HELP, MEM, PORTS, INT, CLS, REBOOT\r\n\r\n")
+        video.putString("A> ")
     }
     fun interrupt(cpu: Cpu8088, intNo: Int) {
         when (intNo) {
             0x10 -> when ((cpu.ax ushr 8) and 0xFF) {
                 0x0E -> video.putChar((cpu.ax and 0xFF).toChar())
                 0x00 -> video.clear()
+                0x03 -> { cpu.ax = 0x0003; cpu.bx = 0x0000 }
             }
+            0x11 -> cpu.ax = 0x0021
+            0x12 -> cpu.ax = 16
             0x16 -> if (((cpu.ax ushr 8) and 0xFF) == 0) cpu.ax = keyboard.popAscii().code
-            0x19 -> { cpu.cs = 0xF000; cpu.ip = 0x0100 }
+            0x19 -> { loadFallbackBios(); cpu.cs = 0xF000; cpu.ip = 0x0100; cpu.halted = false }
             0x20 -> cpu.halted = true
-            else -> video.status("Unhandled INT ${intNo.toString(16)}")
+            else -> video.status("Fallback BIOS: unhandled INT ${intNo.toString(16).uppercase()}")
         }
     }
     fun runMonitorTick() {
-        keyboard.popAsciiOrNull()?.let { video.putChar(it) }
+        val ch = keyboard.popAsciiOrNull() ?: return
+        if (!fallbackConsoleEnabled) {
+            video.putChar(ch)
+            return
+        }
+        when (ch) {
+            '\r', '\n' -> {
+                video.putString("\r\n")
+                handleFallbackCommand(fallbackLine.toString().trim().uppercase())
+                fallbackLine.clear()
+                video.putString("A> ")
+            }
+            '\b' -> {
+                if (fallbackLine.isNotEmpty()) {
+                    fallbackLine.deleteAt(fallbackLine.length - 1)
+                    video.putChar('\b')
+                }
+            }
+            else -> {
+                if (ch.code in 32..126 && fallbackLine.length < 64) {
+                    fallbackLine.append(ch)
+                    video.putChar(ch)
+                }
+            }
+        }
+    }
+    private fun handleFallbackCommand(command: String) {
+        when (command) {
+            "", "HELP" -> video.putString("RetroBIOS commands: HELP MEM PORTS INT CLS REBOOT\r\n")
+            "MEM" -> video.putString("Base memory: 16 KB. BIOS data area: stubbed. ROM window: F0000-FFFFF.\r\n")
+            "PORTS" -> video.putString("Implemented ports: 0060 keyboard, 0061 PPI stub, 0040 PIT stub, 00E9 debug.\r\n")
+            "INT" -> video.putString("Implemented BIOS calls: INT 10h teletype/mode, INT 11h equipment, INT 12h memory, INT 16h read key, INT 19h reboot.\r\n")
+            "CLS" -> video.clear()
+            "REBOOT" -> drawFallbackPost()
+            else -> video.putString("Bad command or missing boot disk: $command\r\n")
+        }
     }
 }
 
