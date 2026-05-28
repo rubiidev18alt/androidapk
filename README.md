@@ -10,10 +10,25 @@ This project turns the original Android APK template into a tiny educational IBM
 - CGA-style 80x25 text display
 - Android soft-keyboard input
 - Optional GLaBIOS ROM loading from `app/src/main/assets/roms/glabios.bin`
+- Built-in RetroBIOS fallback when `glabios.bin` is not present
 
 ## Important accuracy note
 
 This is not yet a full PC emulator like 86Box, MartyPC, or VirtualXT. The app contains a small Kotlin 8088 instruction interpreter and a CGA text screen scaffold. It is useful as a starting point for boot/BIOS experiments, but real DOS compatibility needs a much larger CPU core, DMA, PIC, PIT, PPI, FDC, disk, cassette, and hardware timing work.
+
+## Built-in fallback BIOS
+
+If `app/src/main/assets/roms/glabios.bin` is missing, the app boots `RetroBIOS XT 0.1`, a small built-in fallback BIOS inspired by the useful POST/diagnostic feel of GLaBIOS without copying GLaBIOS source or ROM data.
+
+Fallback features:
+
+- POST-style machine summary screen
+- INT 10h teletype, clear screen, and mode query stubs
+- INT 11h equipment-list stub
+- INT 12h base-memory-size stub returning 16 KB
+- INT 16h blocking keyboard read
+- INT 19h fallback reboot
+- Tiny `A>` monitor with `HELP`, `MEM`, `PORTS`, `INT`, `CLS`, and `REBOOT`
 
 ## GLaBIOS
 
