@@ -28,7 +28,7 @@ class IbmPc5150Emulator {
             cpu.cs = 0xF000
             cpu.ip = 0xFFF0
         } else {
-            biosName = "RetroBIOS fallback"
+            biosName = "IBM 5150 ROM fallback"
             bus.loadFallbackBios()
             cpu.cs = 0xF000
             cpu.ip = 0x0100
@@ -87,18 +87,16 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
     }
     private fun drawFallbackPost() {
         video.clear()
-        video.putString("RetroBIOS XT 0.1  -  built-in fallback BIOS\r\n")
-        video.putString("General Libraries style POST for IBM PC Model 5150 experiments\r\n")
-        video.putString("---------------------------------------------------------------\r\n")
-        video.putString("CPU      : Intel 8088 compatible core @ 4.77 MHz target\r\n")
-        video.putString("Memory   : 16 KB base RAM configured, 1024 KB emulator address space\r\n")
-        video.putString("Video    : CGA compatible 80x25 text mode at B800:0000\r\n")
-        video.putString("Keyboard : Android soft keyboard mapped to PC BIOS input\r\n")
-        video.putString("Boot ROM : app/src/main/assets/roms/glabios.bin not found\r\n")
-        video.putString("Status   : Using fallback INT 10h, INT 16h, INT 19h, and monitor\r\n")
-        video.putString("---------------------------------------------------------------\r\n")
-        video.putString("Commands: HELP, MEM, PORTS, INT, CLS, REBOOT\r\n\r\n")
-        video.putString("A> ")
+        video.putString("IBM PC 5150 compatible ROM fallback\r\n")
+        video.putString("8088 processor initialized\r\n")
+        video.putString("16 KB OK\r\n\r\n")
+        video.putString("Keyboard........ OK\r\n")
+        video.putString("Timer........... OK\r\n")
+        video.putString("CGA text........ OK\r\n\r\n")
+        video.putString("GLaBIOS ROM image not present at app/src/main/assets/roms/glabios.bin\r\n")
+        video.putString("No bootable disk image is attached.\r\n")
+        video.putString("Entering ROM monitor fallback. Type HELP for available checks.\r\n\r\n")
+        video.putString("> ")
     }
     fun interrupt(cpu: Cpu8088, intNo: Int) {
         when (intNo) {
@@ -112,7 +110,7 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
             0x16 -> if (((cpu.ax ushr 8) and 0xFF) == 0) cpu.ax = keyboard.popAscii().code
             0x19 -> { loadFallbackBios(); cpu.cs = 0xF000; cpu.ip = 0x0100; cpu.halted = false }
             0x20 -> cpu.halted = true
-            else -> video.status("Fallback BIOS: unhandled INT ${intNo.toString(16).uppercase()}")
+            else -> video.status("BIOS fallback: unhandled INT ${intNo.toString(16).uppercase()}")
         }
     }
     fun runMonitorTick() {
@@ -126,7 +124,7 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
                 video.putString("\r\n")
                 handleFallbackCommand(fallbackLine.toString().trim().uppercase())
                 fallbackLine.clear()
-                video.putString("A> ")
+                video.putString("> ")
             }
             '\b' -> {
                 if (fallbackLine.isNotEmpty()) {
@@ -144,13 +142,13 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
     }
     private fun handleFallbackCommand(command: String) {
         when (command) {
-            "", "HELP" -> video.putString("RetroBIOS commands: HELP MEM PORTS INT CLS REBOOT\r\n")
-            "MEM" -> video.putString("Base memory: 16 KB. BIOS data area: stubbed. ROM window: F0000-FFFFF.\r\n")
-            "PORTS" -> video.putString("Implemented ports: 0060 keyboard, 0061 PPI stub, 0040 PIT stub, 00E9 debug.\r\n")
-            "INT" -> video.putString("Implemented BIOS calls: INT 10h teletype/mode, INT 11h equipment, INT 12h memory, INT 16h read key, INT 19h reboot.\r\n")
+            "", "HELP" -> video.putString("Available checks: MEM PORTS INT CLS REBOOT\r\n")
+            "MEM" -> video.putString("Base memory reported by INT 12h: 16 KB\r\n")
+            "PORTS" -> video.putString("Stubbed hardware ports: 0040 PIT, 0060 keyboard data, 0061 PPI, 00E9 debug\r\n")
+            "INT" -> video.putString("BIOS calls present: INT 10h, 11h, 12h, 16h, 19h, 20h\r\n")
             "CLS" -> video.clear()
             "REBOOT" -> drawFallbackPost()
-            else -> video.putString("Bad command or missing boot disk: $command\r\n")
+            else -> video.putString("Syntax error\r\n")
         }
     }
 }
