@@ -1,34 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
         android:allowBackup="true"
-        android:label="Keyboard Tile"
+        android:label="IBM PC 5150"
         android:supportsRtl="true"
         android:theme="@style/Theme.SimpleApk">
         <activity
-            android:name=".ShowKeyboardActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:finishOnTaskLaunch="true"
-            android:theme="@style/Theme.KeyboardTrigger" />
-
-        <activity
             android:name=".MainActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <service
-            android:name=".KeyboardTileService"
-            android:exported="true"
-            android:icon="@android:drawable/ic_dialog_dialer"
-            android:label="Show Keyboard"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
-            <intent-filter>
-                <action android:name="android.service.quicksettings.action.QS_TILE" />
-            </intent-filter>
-        </service>
     </application>
 </manifest>
