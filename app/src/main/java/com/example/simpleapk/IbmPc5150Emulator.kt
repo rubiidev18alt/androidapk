@@ -5,6 +5,12 @@ import java.io.FileNotFoundException
 import java.util.ArrayDeque
 import kotlin.math.min
 
+private const val BASE_RAM_SIZE = 16 * 1024
+private const val CGA_TEXT_BASE = 0xB8000
+private const val CGA_TEXT_SIZE = 0x4000
+private const val BIOS_ROM_BASE = 0xF0000
+private const val BIOS_ROM_SIZE = 0x10000
+
 class IbmPc5150Emulator {
     val video = CgaTextScreen()
     val keyboard = PcKeyboard()
@@ -44,25 +50,47 @@ class IbmPc5150Emulator {
 }
 
 class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) {
-    private val ram = ByteArray(1024 * 1024)
+    private val baseRam = ByteArray(BASE_RAM_SIZE)
+    private val cgaRam = ByteArray(CGA_TEXT_SIZE) { if (it % 2 == 0) 0x20 else 0x07 }
+    private val biosRom = ByteArray(BIOS_ROM_SIZE) { 0xFF.toByte() }
     private var pit = 0
     private var fallbackConsoleEnabled = false
     private val fallbackLine = StringBuilder()
 
     fun reset() {
-        ram.fill(0)
+        baseRam.fill(0)
+        cgaRam.fill(0x07)
+        for (i in cgaRam.indices step 2) cgaRam[i] = 0x20
+        biosRom.fill(0xFF.toByte())
         video.clear()
         pit = 0
         fallbackConsoleEnabled = false
         fallbackLine.clear()
     }
 
-    fun rb(addr: Int): Int = ram[addr and 0xFFFFF].toInt() and 0xFF
+    fun rb(addr: Int): Int {
+        val a = addr and 0xFFFFF
+        return when {
+            a < BASE_RAM_SIZE -> baseRam[a].toInt() and 0xFF
+            a in CGA_TEXT_BASE until CGA_TEXT_BASE + CGA_TEXT_SIZE -> cgaRam[a - CGA_TEXT_BASE].toInt() and 0xFF
+            a in BIOS_ROM_BASE until BIOS_ROM_BASE + BIOS_ROM_SIZE -> biosRom[a - BIOS_ROM_BASE].toInt() and 0xFF
+            else -> 0xFF
+        }
+    }
+
     fun wb(addr: Int, value: Int) {
         val a = addr and 0xFFFFF
-        ram[a] = value.toByte()
-        if (a in 0xB8000 until 0xB8000 + 4000 && a % 2 == 0) video.syncByte(a - 0xB8000, value)
+        val v = value and 0xFF
+        when {
+            a < BASE_RAM_SIZE -> baseRam[a] = v.toByte()
+            a in CGA_TEXT_BASE until CGA_TEXT_BASE + CGA_TEXT_SIZE -> {
+                val off = a - CGA_TEXT_BASE
+                cgaRam[off] = v.toByte()
+                if (off % 2 == 0) video.syncByte(off, v)
+            }
+        }
     }
+
     fun rw(addr: Int): Int = rb(addr) or (rb(addr + 1) shl 8)
     fun ww(addr: Int, value: Int) { wb(addr, value); wb(addr + 1, value ushr 8) }
     fun portIn(port: Int): Int = when (port and 0xFFFF) {
@@ -75,14 +103,16 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
         if ((port and 0xFFFF) == 0xE9) video.putChar((value and 0xFF).toChar())
     }
     fun loadRom(rom: ByteArray) {
-        val romLen = min(rom.size, 0x10000)
-        val start = 0x100000 - romLen
-        for (i in 0 until romLen) ram[start + i] = rom[rom.size - romLen + i]
+        biosRom.fill(0xFF.toByte())
+        val romLen = min(rom.size, BIOS_ROM_SIZE)
+        val start = BIOS_ROM_SIZE - romLen
+        for (i in 0 until romLen) biosRom[start + i] = rom[rom.size - romLen + i]
     }
     fun loadFallbackBios() {
         fallbackConsoleEnabled = true
         fallbackLine.clear()
-        ram[0xF0100] = 0xF4.toByte()
+        biosRom.fill(0xFF.toByte())
+        biosRom[0x0100] = 0xF4.toByte()
         drawFallbackPost()
     }
     private fun drawFallbackPost() {
@@ -143,7 +173,7 @@ class PcBus(private val video: CgaTextScreen, private val keyboard: PcKeyboard) 
     private fun handleFallbackCommand(command: String) {
         when (command) {
             "", "HELP" -> video.putString("Available checks: MEM PORTS INT CLS REBOOT\r\n")
-            "MEM" -> video.putString("Base memory reported by INT 12h: 16 KB\r\n")
+            "MEM" -> video.putString("Base memory reported by INT 12h: 16 KB; writable RAM: 00000-03FFF\r\n")
             "PORTS" -> video.putString("Stubbed hardware ports: 0040 PIT, 0060 keyboard data, 0061 PPI, 00E9 debug\r\n")
             "INT" -> video.putString("BIOS calls present: INT 10h, 11h, 12h, 16h, 19h, 20h\r\n")
             "CLS" -> video.clear()
